@@ -106,7 +106,7 @@ class Estimator
     double initial_timestamp;
 
 
-    double para_Pose[WINDOW_SIZE + 1][SIZE_POSE];
+    double para_Pose[WINDOW_SIZE + 1][SIZE_POSE];  //ceres变量内存
     double para_SpeedBias[WINDOW_SIZE + 1][SIZE_SPEEDBIAS];
     double para_Feature[NUM_OF_F][SIZE_FEATURE];
     double para_Ex_Pose[NUM_OF_CAM][SIZE_POSE];

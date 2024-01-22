@@ -12,7 +12,6 @@
 #include "parameters.h"
 #include "utility/visualization.h"
 
-
 Estimator estimator;
 
 std::condition_variable con;
@@ -39,7 +38,7 @@ bool init_feature = 0;
 bool init_imu = 1;
 double last_imu_t = 0;
 
-void predict(const sensor_msgs::ImuConstPtr &imu_msg)
+void predict(const sensor_msgs::ImuConstPtr &imu_msg)//利用中值积分直接计算imu里程计的输出PVQ
 {
     double t = imu_msg->header.stamp.toSec();
     if (init_imu)
@@ -77,11 +76,11 @@ void predict(const sensor_msgs::ImuConstPtr &imu_msg)
     gyr_0 = angular_velocity;
 }
 
-void update()
+void update()//更新修正过的PVQBaBg，从新计算imu里程计
 {
     TicToc t_predict;
     latest_time = current_time;
-    tmp_P = estimator.Ps[WINDOW_SIZE];
+    tmp_P = estimator.Ps[WINDOW_SIZE];  //PVQ都是IMU相对于参考坐标系的
     tmp_Q = estimator.Rs[WINDOW_SIZE];
     tmp_V = estimator.Vs[WINDOW_SIZE];
     tmp_Ba = estimator.Bas[WINDOW_SIZE];
@@ -102,32 +101,33 @@ getMeasurements()
 
     while (true)
     {
-        if (imu_buf.empty() || feature_buf.empty())
+        //检查传感器输入数据的状态
+        if (imu_buf.empty() || feature_buf.empty()) //imu_buf和feature_buf得同时有数据
             return measurements;
 
-        if (!(imu_buf.back()->header.stamp.toSec() > feature_buf.front()->header.stamp.toSec() + estimator.td))
+        if (!(imu_buf.back()->header.stamp.toSec() > feature_buf.front()->header.stamp.toSec() + estimator.td)) //要存在晚于第一帧图像的IMU数据，保证产生一组measurement,没有就再等等
         {
             //ROS_WARN("wait for imu, only should happen at the beginning");
             sum_of_wait++;
             return measurements;
         }
 
-        if (!(imu_buf.front()->header.stamp.toSec() < feature_buf.front()->header.stamp.toSec() + estimator.td))
-        {
+        if (!(imu_buf.front()->header.stamp.toSec() < feature_buf.front()->header.stamp.toSec() + estimator.td))//IMU序列第一个数据要先于第一帧图像，保证产生一组measurement
+        {                                                                                                       //如果没有，就丢弃第一帧图像
             ROS_WARN("throw img, only should happen at the beginning");
             feature_buf.pop();
             continue;
         }
-        sensor_msgs::PointCloudConstPtr img_msg = feature_buf.front();
+        sensor_msgs::PointCloudConstPtr img_msg = feature_buf.front(); //取出feature_buf头部帧
         feature_buf.pop();
 
-        std::vector<sensor_msgs::ImuConstPtr> IMUs;
+        std::vector<sensor_msgs::ImuConstPtr> IMUs;  //选取图像间的IMU数据，直到图像时间戳后第一帧IMU数据为止
         while (imu_buf.front()->header.stamp.toSec() < img_msg->header.stamp.toSec() + estimator.td)
         {
             IMUs.emplace_back(imu_buf.front());
             imu_buf.pop();
         }
-        IMUs.emplace_back(imu_buf.front());
+        IMUs.emplace_back(imu_buf.front()); 
         if (IMUs.empty())
             ROS_WARN("no imu between two image");
         measurements.emplace_back(IMUs, img_msg);
@@ -135,7 +135,7 @@ getMeasurements()
     return measurements;
 }
 
-void imu_callback(const sensor_msgs::ImuConstPtr &imu_msg)
+void imu_callback(const sensor_msgs::ImuConstPtr &imu_msg) //IMU回调，一旦收到imu数据之后，将数据存入imu_buf,同时即时将imu积分为最新的里程信息
 {
     if (imu_msg->header.stamp.toSec() <= last_imu_t)
     {
@@ -166,7 +166,7 @@ void feature_callback(const sensor_msgs::PointCloudConstPtr &feature_msg)
 {
     if (!init_feature)
     {
-        //skip the first detected feature, which doesn't contain optical flow speed
+        //丢掉第一帧图像，skip the first detected feature, which doesn't contain optical flow speed
         init_feature = 1;
         return;
     }
@@ -210,15 +210,15 @@ void process()
 {
     while (true)
     {
-        std::vector<std::pair<std::vector<sensor_msgs::ImuConstPtr>, sensor_msgs::PointCloudConstPtr>> measurements;
+        std::vector<std::pair<std::vector<sensor_msgs::ImuConstPtr>, sensor_msgs::PointCloudConstPtr>> measurements;//接收每帧features以及图像之间的IMU序列
         std::unique_lock<std::mutex> lk(m_buf);
         con.wait(lk, [&]
                  {
-            return (measurements = getMeasurements()).size() != 0;
+            return (measurements = getMeasurements()).size() != 0;//条件变量，当getMeasurements为空时，lambda表达式返回false，线程阻塞，释放lk，然后等待，靠notify_one来唤醒
                  });
         lk.unlock();
         m_estimator.lock();
-        for (auto &measurement : measurements)
+        for (auto &measurement : measurements)//收到图像imu数据对了之后，就开始正式处理数据，进行IMU预积分以及利用图像进行里程计计算，
         {
             auto img_msg = measurement.second;
             double dx = 0, dy = 0, dz = 0, rx = 0, ry = 0, rz = 0;
@@ -239,11 +239,11 @@ void process()
                     rx = imu_msg->angular_velocity.x;
                     ry = imu_msg->angular_velocity.y;
                     rz = imu_msg->angular_velocity.z;
-                    estimator.processIMU(dt, Vector3d(dx, dy, dz), Vector3d(rx, ry, rz));
+                    estimator.processIMU(dt, Vector3d(dx, dy, dz), Vector3d(rx, ry, rz));//利用每个imu数据以及时间间隔计算预积分和里程信息
                     //printf("imu: dt:%f a: %f %f %f w: %f %f %f\n",dt, dx, dy, dz, rx, ry, rz);
 
                 }
-                else
+                else //当imu时刻大于图像时刻，则利用插值获得图像时刻的近似imu测量值
                 {
                     double dt_1 = img_t - current_time;
                     double dt_2 = t - img_t;
@@ -293,6 +293,12 @@ void process()
             ROS_DEBUG("processing vision data with stamp %f \n", img_msg->header.stamp.toSec());
 
             TicToc t_s;
+            //用map结构表达图像中所有的特征点，key表示的是id，value表示的是不同相机下的特征点，特征点用7维向量来表示
+            //分别为x, y, z, p_u, p_v, velocity_x, velocity_y，其中xyz为特征的归一化坐标
+            //
+            //img_msg是点云格式的消息，用以存储一幅图像中的所有特征点信息，
+            //所有特征点的归一化xyz值，按顺序存在消息的points vector中，
+            //uv，和速度按相同的顺序分别存在channels这个4行数组中
             map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> image;
             for (unsigned int i = 0; i < img_msg->points.size(); i++)
             {
@@ -318,7 +324,7 @@ void process()
             std_msgs::Header header = img_msg->header;
             header.frame_id = "world";
 
-            pubOdometry(estimator, header);
+            pubOdometry(estimator, header); //pub优化后滑窗中最新的一帧的位置里程,和轨迹
             pubKeyPoses(estimator, header);
             pubCameraPose(estimator, header);
             pubPointCloud(estimator, header);
@@ -338,10 +344,16 @@ void process()
     }
 }
 
+//这是估计器的实例主文件，里程计的估计主要依靠Estimator类
+//1.首先从yaml配置文件中读取参数，这个靠parameter库文件接口实现，其中参数变量利用了全局的extern变量来实现参数值的全局共享，采用大写的名称形式
+//2.给估计器设置参数
+//3.注册ros主题，定义subcsriber，用以发布和接收里程计各类信息
+//4.开启process主线程，process是整个系统的核心运行代码，通过不断循环读取传感器输入，持续输出估计结果
+
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "vins_estimator");
-    ros::NodeHandle n("~");
+    ros::NodeHandle n("~"); //ros节点私有命名空
     ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info);
     readParameters(n);
     estimator.setParameter();
@@ -353,7 +365,7 @@ int main(int argc, char **argv)
     registerPub(n);
 
     ros::Subscriber sub_imu = n.subscribe(IMU_TOPIC, 2000, imu_callback, ros::TransportHints().tcpNoDelay());
-    ros::Subscriber sub_image = n.subscribe("/feature_tracker/feature", 2000, feature_callback);
+    ros::Subscriber sub_image = n.subscribe("/feature_tracker/feature", 2000, feature_callback); //图像特征以PointCloud消息格式来封装传输
     ros::Subscriber sub_restart = n.subscribe("/feature_tracker/restart", 2000, restart_callback);
     ros::Subscriber sub_relo_points = n.subscribe("/pose_graph/match_points", 2000, relocalization_callback);
 

@@ -34,7 +34,7 @@ void ResidualBlockInfo::Evaluate()
     //std::cout << saes.eigenvalues() << std::endl;
     //ROS_ASSERT(saes.eigenvalues().minCoeff() >= -1e-6);
 
-    if (loss_function)
+    if (loss_function) //TODO 加上鲁棒核函数的雅克比
     {
         double residual_scaling_, alpha_sq_norm_;
 
@@ -97,13 +97,13 @@ void MarginalizationInfo::addResidualBlockInfo(ResidualBlockInfo *residual_block
     {
         double *addr = parameter_blocks[i];
         int size = parameter_block_sizes[i];
-        parameter_block_size[reinterpret_cast<long>(addr)] = size;
+        parameter_block_size[reinterpret_cast<long>(addr)] = size; //用地址来当作索引值来存变量size
     }
 
     for (int i = 0; i < static_cast<int>(residual_block_info->drop_set.size()); i++)
     {
         double *addr = parameter_blocks[residual_block_info->drop_set[i]];
-        parameter_block_idx[reinterpret_cast<long>(addr)] = 0;
+        parameter_block_idx[reinterpret_cast<long>(addr)] = 0; 
     }
 }
 
@@ -111,10 +111,10 @@ void MarginalizationInfo::preMarginalize()
 {
     for (auto it : factors)
     {
-        it->Evaluate();
+        it->Evaluate(); //计算测量的残差和雅克比
 
         std::vector<int> block_sizes = it->cost_function->parameter_block_sizes();
-        for (int i = 0; i < static_cast<int>(block_sizes.size()); i++)
+        for (int i = 0; i < static_cast<int>(block_sizes.size()); i++) //parameter_block_data填入data数据
         {
             long addr = reinterpret_cast<long>(it->parameter_blocks[i]);
             int size = block_sizes[i];
@@ -138,7 +138,7 @@ int MarginalizationInfo::globalSize(int size) const
     return size == 6 ? 7 : size;
 }
 
-void* ThreadsConstructA(void* threadsstruct)
+void* ThreadsConstructA(void* threadsstruct) //多线程构建信息矩阵A
 {
     ThreadsStruct* p = ((ThreadsStruct*)threadsstruct);
     for (auto it : p->sub_factors)
@@ -147,9 +147,9 @@ void* ThreadsConstructA(void* threadsstruct)
         {
             int idx_i = p->parameter_block_idx[reinterpret_cast<long>(it->parameter_blocks[i])];
             int size_i = p->parameter_block_size[reinterpret_cast<long>(it->parameter_blocks[i])];
-            if (size_i == 7)
+            if (size_i == 7) 
                 size_i = 6;
-            Eigen::MatrixXd jacobian_i = it->jacobians[i].leftCols(size_i);
+            Eigen::MatrixXd jacobian_i = it->jacobians[i].leftCols(size_i); //取出因子中对应变量的的雅克比
             for (int j = i; j < static_cast<int>(it->parameter_blocks.size()); j++)
             {
                 int idx_j = p->parameter_block_idx[reinterpret_cast<long>(it->parameter_blocks[j])];
@@ -173,16 +173,16 @@ void* ThreadsConstructA(void* threadsstruct)
 
 void MarginalizationInfo::marginalize()
 {
-    int pos = 0;
-    for (auto &it : parameter_block_idx)
+    int pos = 0;  //记录边缘化变量在在信息矩阵上的位置索引
+    for (auto &it : parameter_block_idx) //存储变量的index的数组，此刻只有边缘化变量
     {
-        it.second = pos;
+        it.second = pos;                
         pos += localSize(parameter_block_size[it.first]);
     }
 
-    m = pos;
+    m = pos;  //计算边缘化的变量总共的维度
 
-    for (const auto &it : parameter_block_size)
+    for (const auto &it : parameter_block_size)  //存储变量的index的数组，此刻将其它剩余变量的index扩增进来
     {
         if (parameter_block_idx.find(it.first) == parameter_block_idx.end())
         {
@@ -191,12 +191,12 @@ void MarginalizationInfo::marginalize()
         }
     }
 
-    n = pos - m;
+    n = pos - m; //剩余变量维数
 
     //ROS_DEBUG("marginalization, pos: %d, m: %d, n: %d, size: %d", pos, m, n, (int)parameter_block_idx.size());
 
     TicToc t_summing;
-    Eigen::MatrixXd A(pos, pos);
+    Eigen::MatrixXd A(pos, pos); //信息矩阵
     Eigen::VectorXd b(pos);
     A.setZero();
     b.setZero();
@@ -263,7 +263,7 @@ void MarginalizationInfo::marginalize()
     //ROS_INFO("A diff %f , b diff %f ", (A - tmp_A).sum(), (b - tmp_b).sum());
 
 
-    //TODO
+    //TODO 
     Eigen::MatrixXd Amm = 0.5 * (A.block(0, 0, m, m) + A.block(0, 0, m, m).transpose());
     Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> saes(Amm);
 
@@ -277,7 +277,7 @@ void MarginalizationInfo::marginalize()
     Eigen::MatrixXd Arm = A.block(m, 0, n, m);
     Eigen::MatrixXd Arr = A.block(m, m, n, n);
     Eigen::VectorXd brr = b.segment(m, n);
-    A = Arr - Arm * Amm_inv * Amr;
+    A = Arr - Arm * Amm_inv * Amr;  //舒尔补，获得边际概率作为剩余变量先验的信息矩阵
     b = brr - Arm * Amm_inv * bmm;
 
     Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> saes2(A);
@@ -287,7 +287,7 @@ void MarginalizationInfo::marginalize()
     Eigen::VectorXd S_sqrt = S.cwiseSqrt();
     Eigen::VectorXd S_inv_sqrt = S_inv.cwiseSqrt();
 
-    linearized_jacobians = S_sqrt.asDiagonal() * saes2.eigenvectors().transpose();
+    linearized_jacobians = S_sqrt.asDiagonal() * saes2.eigenvectors().transpose();      //将先验信息矩阵逆向转化为残差和雅克比，因为ceres求解输入是这两个，没有直接处理信息矩阵的接口
     linearized_residuals = S_inv_sqrt.asDiagonal() * saes2.eigenvectors().transpose() * b;
     //std::cout << A << std::endl
     //          << std::endl;
@@ -307,7 +307,7 @@ std::vector<double *> MarginalizationInfo::getParameterBlocks(std::unordered_map
     {
         if (it.second >= m)
         {
-            keep_block_size.push_back(parameter_block_size[it.first]);
+            keep_block_size.push_back(parameter_block_size[it.first]);  //边缘化完成后保留的信息，包括变量维数，变量的位置，变量的数据，变量的地址
             keep_block_idx.push_back(parameter_block_idx[it.first]);
             keep_block_data.push_back(parameter_block_data[it.first]);
             keep_block_addr.push_back(addr_shift[it.first]);
@@ -327,7 +327,7 @@ MarginalizationFactor::MarginalizationFactor(MarginalizationInfo* _marginalizati
         cnt += it;
     }
     //printf("residual size: %d, %d\n", cnt, n);
-    set_num_residuals(marginalization_info->n);
+    set_num_residuals(marginalization_info->n);  //填上CostFunction的残差数以及数据区块,n更残差数是一样的，因为是先验因子
 };
 
 bool MarginalizationFactor::Evaluate(double const *const *parameters, double *residuals, double **jacobians) const
@@ -341,14 +341,14 @@ bool MarginalizationFactor::Evaluate(double const *const *parameters, double *re
     //printf("residual %x\n", reinterpret_cast<long>(residuals));
     //}
     int n = marginalization_info->n;
-    int m = marginalization_info->m;
+    int m = marginalization_info->m;    //m为边缘化的变量维数
     Eigen::VectorXd dx(n);
     for (int i = 0; i < static_cast<int>(marginalization_info->keep_block_size.size()); i++)
     {
         int size = marginalization_info->keep_block_size[i];
-        int idx = marginalization_info->keep_block_idx[i] - m;
-        Eigen::VectorXd x = Eigen::Map<const Eigen::VectorXd>(parameters[i], size);
-        Eigen::VectorXd x0 = Eigen::Map<const Eigen::VectorXd>(marginalization_info->keep_block_data[i], size);
+        int idx = marginalization_info->keep_block_idx[i] - m;  //减去边缘化变量维数
+        Eigen::VectorXd x = Eigen::Map<const Eigen::VectorXd>(parameters[i], size);  //每个状态变量
+        Eigen::VectorXd x0 = Eigen::Map<const Eigen::VectorXd>(marginalization_info->keep_block_data[i], size); 
         if (size != 7)
             dx.segment(idx, size) = x - x0;
         else
@@ -361,7 +361,7 @@ bool MarginalizationFactor::Evaluate(double const *const *parameters, double *re
             }
         }
     }
-    Eigen::Map<Eigen::VectorXd>(residuals, n) = marginalization_info->linearized_residuals + marginalization_info->linearized_jacobians * dx;
+    Eigen::Map<Eigen::VectorXd>(residuals, n) = marginalization_info->linearized_residuals + marginalization_info->linearized_jacobians * dx; //J*dx+b 残差
     if (jacobians)
     {
 

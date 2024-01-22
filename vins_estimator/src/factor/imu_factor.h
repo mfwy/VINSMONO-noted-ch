@@ -9,7 +9,7 @@
 
 #include <ceres/ceres.h>
 
-class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9>
+class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9> //15维残差，PVQBaBg
 {
   public:
     IMUFactor() = delete;
@@ -58,7 +58,7 @@ class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9>
 #endif
 
         Eigen::Map<Eigen::Matrix<double, 15, 1>> residual(residuals);
-        residual = pre_integration->evaluate(Pi, Qi, Vi, Bai, Bgi,
+        residual = pre_integration->evaluate(Pi, Qi, Vi, Bai, Bgi,  //残差计算放到了pre_integration类里面了
                                             Pj, Qj, Vj, Baj, Bgj);
 
         Eigen::Matrix<double, 15, 15> sqrt_info = Eigen::LLT<Eigen::Matrix<double, 15, 15>>(pre_integration->covariance.inverse()).matrixL().transpose();

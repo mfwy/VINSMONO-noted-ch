@@ -5,7 +5,7 @@ double ProjectionFactor::sum_t;
 
 ProjectionFactor::ProjectionFactor(const Eigen::Vector3d &_pts_i, const Eigen::Vector3d &_pts_j) : pts_i(_pts_i), pts_j(_pts_j)
 {
-#ifdef UNIT_SPHERE_ERROR
+#ifdef UNIT_SPHERE_ERROR  //TODO 球形投影，待看
     Eigen::Vector3d b1, b2;
     Eigen::Vector3d a = pts_j.normalized();
     Eigen::Vector3d tmp(0, 0, 1);
@@ -32,18 +32,18 @@ bool ProjectionFactor::Evaluate(double const *const *parameters, double *residua
 
     double inv_dep_i = parameters[3][0];
 
-    Eigen::Vector3d pts_camera_i = pts_i / inv_dep_i;
-    Eigen::Vector3d pts_imu_i = qic * pts_camera_i + tic;
-    Eigen::Vector3d pts_w = Qi * pts_imu_i + Pi;
-    Eigen::Vector3d pts_imu_j = Qj.inverse() * (pts_w - Pj);
-    Eigen::Vector3d pts_camera_j = qic.inverse() * (pts_imu_j - tic);
+    Eigen::Vector3d pts_camera_i = pts_i / inv_dep_i;       //点在相机i坐标系下的坐标
+    Eigen::Vector3d pts_imu_i = qic * pts_camera_i + tic;   //在imu下的坐标
+    Eigen::Vector3d pts_w = Qi * pts_imu_i + Pi;            //在全局world系下的坐标
+    Eigen::Vector3d pts_imu_j = Qj.inverse() * (pts_w - Pj);//变换到imu_j系下
+    Eigen::Vector3d pts_camera_j = qic.inverse() * (pts_imu_j - tic);//变换到相机j系下
     Eigen::Map<Eigen::Vector2d> residual(residuals);
 
 #ifdef UNIT_SPHERE_ERROR 
     residual =  tangent_base * (pts_camera_j.normalized() - pts_j.normalized());
 #else
     double dep_j = pts_camera_j.z();
-    residual = (pts_camera_j / dep_j).head<2>() - pts_j.head<2>();
+    residual = (pts_camera_j / dep_j).head<2>() - pts_j.head<2>();  //计算残差
 #endif
 
     residual = sqrt_info * residual;
@@ -120,7 +120,7 @@ bool ProjectionFactor::Evaluate(double const *const *parameters, double *residua
     return true;
 }
 
-void ProjectionFactor::check(double **parameters)
+void ProjectionFactor::check(double **parameters) //TODO check ,没看
 {
     double *res = new double[15];
     double **jaco = new double *[4];

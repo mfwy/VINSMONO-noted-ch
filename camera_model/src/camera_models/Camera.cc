@@ -124,6 +124,7 @@ Camera::estimateExtrinsics(const std::vector<cv::Point3f>& objectPoints,
                            const std::vector<cv::Point2f>& imagePoints,
                            cv::Mat& rvec, cv::Mat& tvec) const
 {
+    //利用PnP方法估计相机外参
     std::vector<cv::Point2f> Ms(imagePoints.size());
     for (size_t i = 0; i < Ms.size(); ++i)
     {

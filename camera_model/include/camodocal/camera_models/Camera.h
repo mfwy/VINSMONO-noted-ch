@@ -9,7 +9,7 @@
 namespace camodocal
 {
 
-class Camera
+class Camera //相机基类
 {
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW

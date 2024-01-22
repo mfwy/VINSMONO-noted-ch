@@ -103,7 +103,7 @@ void printStatistics(const Estimator &estimator, double t)
         ROS_INFO("td %f", estimator.td);
 }
 
-void pubOdometry(const Estimator &estimator, const std_msgs::Header &header)
+void pubOdometry(const Estimator &estimator, const std_msgs::Header &header) 
 {
     if (estimator.solver_flag == Estimator::SolverFlag::NON_LINEAR)
     {
@@ -134,7 +134,7 @@ void pubOdometry(const Estimator &estimator, const std_msgs::Header &header)
         path.poses.push_back(pose_stamped);
         pub_path.publish(path);
 
-        Vector3d correct_t;
+        Vector3d correct_t; //回环修正
         Vector3d correct_v;
         Quaterniond correct_q;
         correct_t = estimator.drift_correct_r * estimator.Ps[WINDOW_SIZE] + estimator.drift_correct_t;
@@ -156,19 +156,20 @@ void pubOdometry(const Estimator &estimator, const std_msgs::Header &header)
         // write result to file
         ofstream foutC(VINS_RESULT_PATH, ios::app);
         foutC.setf(ios::fixed, ios::floatfield);
-        foutC.precision(0);
-        foutC << header.stamp.toSec() * 1e9 << ",";
+        foutC.precision(9);
+        // foutC << header.stamp.toSec() * 1e9 << " "; //修改为tum格式
+        foutC << header.stamp.toSec() << " ";
         foutC.precision(5);
-        foutC << estimator.Ps[WINDOW_SIZE].x() << ","
-              << estimator.Ps[WINDOW_SIZE].y() << ","
-              << estimator.Ps[WINDOW_SIZE].z() << ","
-              << tmp_Q.w() << ","
-              << tmp_Q.x() << ","
-              << tmp_Q.y() << ","
-              << tmp_Q.z() << ","
-              << estimator.Vs[WINDOW_SIZE].x() << ","
-              << estimator.Vs[WINDOW_SIZE].y() << ","
-              << estimator.Vs[WINDOW_SIZE].z() << "," << endl;
+        foutC << estimator.Ps[WINDOW_SIZE].x() << " "
+              << estimator.Ps[WINDOW_SIZE].y() << " "
+              << estimator.Ps[WINDOW_SIZE].z() << " "
+              << tmp_Q.x() << " "
+              << tmp_Q.y() << " "
+              << tmp_Q.z() << " "
+              << tmp_Q.w()<<endl; //w放后面了
+            //   << estimator.Vs[WINDOW_SIZE].x() << " "
+            //   << estimator.Vs[WINDOW_SIZE].y() << " "
+            //   << estimator.Vs[WINDOW_SIZE].z() << " " << endl;
         foutC.close();
     }
 }
@@ -230,7 +231,7 @@ void pubCameraPose(const Estimator &estimator, const std_msgs::Header &header)
 
         pub_camera_pose.publish(odometry);
 
-        cameraposevisual.reset();
+        cameraposevisual.reset();  //调用cameraposevisual来画一个相机的图案，并发布其轨迹
         cameraposevisual.add_pose(P, R);
         cameraposevisual.publish_by(pub_camera_pose_visual, odometry.header);
     }
@@ -265,7 +266,7 @@ void pubPointCloud(const Estimator &estimator, const std_msgs::Header &header)
     pub_point_cloud.publish(point_cloud);
 
 
-    // pub margined potin
+    // pub margined points
     sensor_msgs::PointCloud margin_cloud;
     margin_cloud.header = header;
 
@@ -296,7 +297,7 @@ void pubPointCloud(const Estimator &estimator, const std_msgs::Header &header)
 }
 
 
-void pubTF(const Estimator &estimator, const std_msgs::Header &header)
+void pubTF(const Estimator &estimator, const std_msgs::Header &header)  //TODO pubTF
 {
     if( estimator.solver_flag != Estimator::SolverFlag::NON_LINEAR)
         return;

@@ -32,15 +32,15 @@ KeyFrame::KeyFrame(double _time_stamp, int _index, Vector3d &_vio_T_w_i, Matrix3
 	has_loop = false;
 	loop_index = -1;
 	has_fast_point = false;
-	loop_info << 0, 0, 0, 0, 0, 0, 0, 0;
+	loop_info << 0, 0, 0, 0, 0, 0, 0, 0; //匹配上的回环对之间的相对位姿
 	sequence = _sequence;
-	computeWindowBRIEFPoint();
-	computeBRIEFPoint();
-	if(!DEBUG_IMAGE)
+	computeWindowBRIEFPoint(); 	//计算VIO发送过来的特征，这个数量相对较少
+	computeBRIEFPoint();		//这里直接对图像进行fast，BRIEF计算，增加特征数
+	if(!DEBUG_IMAGE) 			
 		image.release();
 }
 
-// load previous keyframe
+// load previous keyframe  
 KeyFrame::KeyFrame(double _time_stamp, int _index, Vector3d &_vio_T_w_i, Matrix3d &_vio_R_w_i, Vector3d &_T_w_i, Matrix3d &_R_w_i,
 					cv::Mat &_image, int _loop_index, Eigen::Matrix<double, 8, 1 > &_loop_info,
 					vector<cv::KeyPoint> &_keypoints, vector<cv::KeyPoint> &_keypoints_norm, vector<BRIEF::bitset> &_brief_descriptors)
@@ -128,7 +128,7 @@ bool KeyFrame::searchInAera(const BRIEF::bitset window_descriptor,
     cv::Point2f best_pt;
     int bestDist = 128;
     int bestIndex = -1;
-    for(int i = 0; i < (int)descriptors_old.size(); i++)
+    for(int i = 0; i < (int)descriptors_old.size(); i++) //遍历old_key的descriptors_old，寻找最近的
     {
 
         int dis = HammingDis(window_descriptor, descriptors_old[i]);
@@ -160,8 +160,8 @@ void KeyFrame::searchByBRIEFDes(std::vector<cv::Point2f> &matched_2d_old,
     {
         cv::Point2f pt(0.f, 0.f);
         cv::Point2f pt_norm(0.f, 0.f);
-        if (searchInAera(window_brief_descriptors[i], descriptors_old, keypoints_old, keypoints_old_norm, pt, pt_norm))
-          status.push_back(1);
+        if (searchInAera(window_brief_descriptors[i], descriptors_old, keypoints_old, keypoints_old_norm, pt, pt_norm)) //从old_key的描述子中寻找与每个window_brief_descriptors接近的，
+          status.push_back(1);																							//采用hamming距离
         else
           status.push_back(0);
         matched_2d_old.push_back(pt);
@@ -299,7 +299,7 @@ bool KeyFrame::findConnection(KeyFrame* old_kf)
 	#endif
 	//printf("search by des\n");
 	searchByBRIEFDes(matched_2d_old, matched_2d_old_norm, status, old_kf->brief_descriptors, old_kf->keypoints, old_kf->keypoints_norm);
-	reduceVector(matched_2d_cur, status);
+	reduceVector(matched_2d_cur, status); //根据匹配成功状态，修剪各个向量
 	reduceVector(matched_2d_old, status);
 	reduceVector(matched_2d_cur_norm, status);
 	reduceVector(matched_2d_old_norm, status);
@@ -403,10 +403,10 @@ bool KeyFrame::findConnection(KeyFrame* old_kf)
 	Eigen::Vector3d relative_t;
 	Quaterniond relative_q;
 	double relative_yaw;
-	if ((int)matched_2d_cur.size() > MIN_LOOP_NUM)
+	if ((int)matched_2d_cur.size() > MIN_LOOP_NUM)  //匹配点要多于25对
 	{
 		status.clear();
-	    PnPRANSAC(matched_2d_old_norm, matched_3d, status, PnP_T_old, PnP_R_old);
+	    PnPRANSAC(matched_2d_old_norm, matched_3d, status, PnP_T_old, PnP_R_old); //利用回环匹配帧old_key的2d特征点与3D点实现PnP求解
 	    reduceVector(matched_2d_cur, status);
 	    reduceVector(matched_2d_old, status);
 	    reduceVector(matched_2d_cur_norm, status);
@@ -414,14 +414,14 @@ bool KeyFrame::findConnection(KeyFrame* old_kf)
 	    reduceVector(matched_3d, status);
 	    reduceVector(matched_id, status);
 	    #if 1
-	    	if (DEBUG_IMAGE)
+	    	if (DEBUG_IMAGE) //DEBUG_IMAGE标志是否要把这些回环图片存起来作比对
 	        {
 	        	int gap = 10;
-	        	cv::Mat gap_image(ROW, gap, CV_8UC1, cv::Scalar(255, 255, 255));
+	        	cv::Mat gap_image(ROW, gap, CV_8UC1, cv::Scalar(255, 255, 255));//两幅图像之间的白色间隔带
 	            cv::Mat gray_img, loop_match_img;
 	            cv::Mat old_img = old_kf->image;
 	            cv::hconcat(image, gap_image, gap_image);
-	            cv::hconcat(gap_image, old_img, gray_img);
+	            cv::hconcat(gap_image, old_img, gray_img);  //用于产生回环匹配图像，即loop_match_image
 	            cvtColor(gray_img, loop_match_img, CV_GRAY2RGB);
 	            for(int i = 0; i< (int)matched_2d_cur.size(); i++)
 	            {
@@ -460,7 +460,7 @@ bool KeyFrame::findConnection(KeyFrame* old_kf)
 	            	cv::waitKey(10);  
 	            	*/
 	            	cv::Mat thumbimage;
-	            	cv::resize(loop_match_img, thumbimage, cv::Size(loop_match_img.cols / 2, loop_match_img.rows / 2));
+	            	cv::resize(loop_match_img, thumbimage, cv::Size(loop_match_img.cols / 2, loop_match_img.rows / 2)); //把上面拼接的图像缩小到一半，以便于显示
 	    	    	sensor_msgs::ImagePtr msg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", thumbimage).toImageMsg();
 	                msg->header.stamp = ros::Time(time_stamp);
 	    	    	pub_match_img.publish(msg);
@@ -477,7 +477,7 @@ bool KeyFrame::findConnection(KeyFrame* old_kf)
 	    //printf("PNP relative\n");
 	    //cout << "pnp relative_t " << relative_t.transpose() << endl;
 	    //cout << "pnp relative_yaw " << relative_yaw << endl;
-	    if (abs(relative_yaw) < 30.0 && relative_t.norm() < 20.0)
+	    if (abs(relative_yaw) < 30.0 && relative_t.norm() < 20.0) //位置够近
 	    {
 
 	    	has_loop = true;
@@ -510,7 +510,7 @@ bool KeyFrame::findConnection(KeyFrame* old_kf)
 			    t_q_index.values.push_back(Q.z());
 			    t_q_index.values.push_back(index);
 			    msg_match_points.channels.push_back(t_q_index);
-			    pub_match_points.publish(msg_match_points);
+			    pub_match_points.publish(msg_match_points); //发布旧的回环帧信息
 	    	}
 	        return true;
 	    }

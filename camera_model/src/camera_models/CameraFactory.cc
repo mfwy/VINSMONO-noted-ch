@@ -23,9 +23,9 @@ CameraFactory::CameraFactory()
 boost::shared_ptr<CameraFactory>
 CameraFactory::instance(void)
 {
-    if (m_instance.get() == 0)
+    if (m_instance.get() == 0) //boost::shared_ptr get()返回内存的内置指针，如果为空时，说明还没指向一个内存
     {
-        m_instance.reset(new CameraFactory);
+        m_instance.reset(new CameraFactory); 
     }
 
     return m_instance;
@@ -87,7 +87,7 @@ CameraFactory::generateCamera(Camera::ModelType modelType,
 }
 
 CameraPtr
-CameraFactory::generateCameraFromYamlFile(const std::string& filename)
+CameraFactory::generateCameraFromYamlFile(const std::string& filename) //config file 如euroc.yaml
 {
     cv::FileStorage fs(filename, cv::FileStorage::READ);
 

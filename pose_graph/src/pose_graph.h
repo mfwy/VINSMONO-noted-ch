@@ -23,7 +23,8 @@
 #include "ThirdParty/DVision/DVision.h"
 #include "ThirdParty/DBoW/TemplatedDatabase.h"
 #include "ThirdParty/DBoW/TemplatedVocabulary.h"
-
+#include <opencv2/imgproc/types_c.h>
+#include <opencv2/imgproc/imgproc_c.h>
 
 #define SHOW_S_EDGE false
 #define SHOW_L_EDGE true
@@ -96,7 +97,7 @@ T NormalizeAngle(const T& angle_degrees) {
   	return angle_degrees;
 };
 
-class AngleLocalParameterization {
+class AngleLocalParameterization {  //TODO AutoDiffLocalParameterization
  public:
 
   template <typename T>

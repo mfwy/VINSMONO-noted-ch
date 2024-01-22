@@ -55,14 +55,14 @@ class MarginalizationInfo
     std::vector<double *> getParameterBlocks(std::unordered_map<long, double *> &addr_shift);
 
     std::vector<ResidualBlockInfo *> factors;
-    int m, n;
+    int m, n;   //边缘化变量所占的维数m，剩余变量个数n
     std::unordered_map<long, int> parameter_block_size; //global size
     int sum_block_size;
     std::unordered_map<long, int> parameter_block_idx; //local size
     std::unordered_map<long, double *> parameter_block_data;
 
-    std::vector<int> keep_block_size; //global size
-    std::vector<int> keep_block_idx;  //local size
+    std::vector<int> keep_block_size; //global size变量块维度数组
+    std::vector<int> keep_block_idx;  //local size 变量对应在信息矩阵中的行列索引
     std::vector<double *> keep_block_data;
 
     Eigen::MatrixXd linearized_jacobians;

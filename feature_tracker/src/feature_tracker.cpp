@@ -86,7 +86,7 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
 
     if (EQUALIZE)
     {
-        cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(3.0, cv::Size(8, 8));
+        cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(3.0, cv::Size(8, 8)); //图像均衡化
         TicToc t_c;
         clahe->apply(_img, img);
         ROS_DEBUG("CLAHE costs: %fms", t_c.toc());
@@ -128,8 +128,8 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
         n++;
 
     if (PUB_THIS_FRAME)
-    {
-        rejectWithF();
+    { 
+        rejectWithF(); //RANSAC排除异常值
         ROS_DEBUG("set mask begins");
         TicToc t_m;
         setMask();

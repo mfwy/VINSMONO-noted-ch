@@ -14,11 +14,11 @@ class IntegrationBase
                     const Eigen::Vector3d &_linearized_ba, const Eigen::Vector3d &_linearized_bg)
         : acc_0{_acc_0}, gyr_0{_gyr_0}, linearized_acc{_acc_0}, linearized_gyr{_gyr_0},
           linearized_ba{_linearized_ba}, linearized_bg{_linearized_bg},
-            jacobian{Eigen::Matrix<double, 15, 15>::Identity()}, covariance{Eigen::Matrix<double, 15, 15>::Zero()},
+            jacobian{Eigen::Matrix<double, 15, 15>::Identity()}, covariance{Eigen::Matrix<double, 15, 15>::Zero()}, //15维度=PVQBaBg
           sum_dt{0.0}, delta_p{Eigen::Vector3d::Zero()}, delta_q{Eigen::Quaterniond::Identity()}, delta_v{Eigen::Vector3d::Zero()}
 
     {
-        noise = Eigen::Matrix<double, 18, 18>::Zero();
+        noise = Eigen::Matrix<double, 18, 18>::Zero(); //为什么是18呢，得算算
         noise.block<3, 3>(0, 0) =  (ACC_N * ACC_N) * Eigen::Matrix3d::Identity();
         noise.block<3, 3>(3, 3) =  (GYR_N * GYR_N) * Eigen::Matrix3d::Identity();
         noise.block<3, 3>(6, 6) =  (ACC_N * ACC_N) * Eigen::Matrix3d::Identity();
@@ -70,7 +70,7 @@ class IntegrationBase
         result_linearized_ba = linearized_ba;
         result_linearized_bg = linearized_bg;         
 
-        if(update_jacobian)
+        if(update_jacobian) //更新预积分变量的状态矩阵，用以迭代计算预积分变量的协方差，协方差用以获得预积分因子残差的权重信息矩阵
         {
             Vector3d w_x = 0.5 * (_gyr_0 + _gyr_1) - linearized_bg;
             Vector3d a_0_x = _acc_0 - linearized_ba;
@@ -178,7 +178,7 @@ class IntegrationBase
         Eigen::Vector3d corrected_delta_p = delta_p + dp_dba * dba + dp_dbg * dbg;
 
         residuals.block<3, 1>(O_P, 0) = Qi.inverse() * (0.5 * G * sum_dt * sum_dt + Pj - Pi - Vi * sum_dt) - corrected_delta_p;
-        residuals.block<3, 1>(O_R, 0) = 2 * (corrected_delta_q.inverse() * (Qi.inverse() * Qj)).vec();
+        residuals.block<3, 1>(O_R, 0) = 2 * (corrected_delta_q.inverse() * (Qi.inverse() * Qj)).vec(); //这里的2倍是四元数和轴角之间的那个2倍
         residuals.block<3, 1>(O_V, 0) = Qi.inverse() * (G * sum_dt + Vj - Vi) - corrected_delta_v;
         residuals.block<3, 1>(O_BA, 0) = Baj - Bai;
         residuals.block<3, 1>(O_BG, 0) = Bgj - Bgi;

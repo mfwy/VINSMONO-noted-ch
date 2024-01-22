@@ -192,7 +192,7 @@ namespace cv {
 
 bool MotionEstimator::solveRelativeRT(const vector<pair<Vector3d, Vector3d>> &corres, Matrix3d &Rotation, Vector3d &Translation)
 {
-    if (corres.size() >= 15)
+    if (corres.size() >= 15)//TODO 这里cv::FM_RANSAC最少需要15点对。空了探究一下匹配点对数
     {
         vector<cv::Point2f> ll, rr;
         for (int i = 0; i < int(corres.size()); i++)

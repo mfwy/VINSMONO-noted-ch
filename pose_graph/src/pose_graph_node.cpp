@@ -32,7 +32,7 @@ std::mutex m_buf;
 std::mutex m_process;
 int frame_index  = 0;
 int sequence = 1;
-PoseGraph posegraph;
+PoseGraph posegraph; //构造函数中开了一个optimize4DoF线程
 int skip_first_cnt = 0;
 int SKIP_CNT;
 int skip_cnt = 0;
@@ -76,10 +76,10 @@ void new_sequence()
         ROS_WARN("only support 5 sequences since it's boring to copy code for more sequences.");
         ROS_BREAK();
     }
-    posegraph.posegraph_visualization->reset();
+    posegraph.posegraph_visualization->reset(); //清空markers
     posegraph.publish();
     m_buf.lock();
-    while(!image_buf.empty())
+    while(!image_buf.empty()) //清空消息缓存
         image_buf.pop();
     while(!point_buf.empty())
         point_buf.pop();
@@ -161,15 +161,15 @@ void imu_forward_callback(const nav_msgs::Odometry::ConstPtr &forward_msg)
         vio_q.y() = forward_msg->pose.pose.orientation.y;
         vio_q.z() = forward_msg->pose.pose.orientation.z;
 
-        vio_t = posegraph.w_r_vio * vio_t + posegraph.w_t_vio;
+        vio_t = posegraph.w_r_vio * vio_t + posegraph.w_t_vio; //可能会有多个新序列，w_r_vio指的是当前序列的坐标相对于第一个序列的位姿
         vio_q = posegraph.w_r_vio *  vio_q;
 
-        vio_t = posegraph.r_drift * vio_t + posegraph.t_drift;
+        vio_t = posegraph.r_drift * vio_t + posegraph.t_drift; //补偿漂移
         vio_q = posegraph.r_drift * vio_q;
 
         Vector3d vio_t_cam;
         Quaterniond vio_q_cam;
-        vio_t_cam = vio_t + vio_q * tic;
+        vio_t_cam = vio_t + vio_q * tic; //相机位姿
         vio_q_cam = vio_q * qic;        
 
         cameraposevisual.reset();
@@ -177,7 +177,7 @@ void imu_forward_callback(const nav_msgs::Odometry::ConstPtr &forward_msg)
         cameraposevisual.publish_by(pub_camera_pose_visual, forward_msg->header);
     }
 }
-void relo_relative_pose_callback(const nav_msgs::Odometry::ConstPtr &pose_msg)
+void relo_relative_pose_callback(const nav_msgs::Odometry::ConstPtr &pose_msg)  // 与vio之间的交互relocalization
 {
     Vector3d relative_t = Vector3d(pose_msg->pose.pose.position.x,
                                    pose_msg->pose.pose.position.y,
@@ -263,7 +263,7 @@ void vio_callback(const nav_msgs::Odometry::ConstPtr &pose_msg)
     }
     pub_key_odometrys.publish(key_odometrys);
 
-    if (!LOOP_CLOSURE)
+    if (!LOOP_CLOSURE)  //发布没有回环校正的路径
     {
         geometry_msgs::PoseStamped pose_stamped;
         pose_stamped.header = pose_msg->header;
@@ -331,7 +331,7 @@ void process()
                     point_buf.pop();
                 point_msg = point_buf.front();
                 point_buf.pop();
-            }
+            } //此时pose_msg，image_msg，point_msg时间戳相同
         }
         m_buf.unlock();
 
@@ -415,7 +415,7 @@ void process()
                                    point_3d, point_2d_uv, point_2d_normal, point_id, sequence);   
                 m_process.lock();
                 start_flag = 1;
-                posegraph.addKeyFrame(keyframe, 1);
+                posegraph.addKeyFrame(keyframe, 1); //读取关键帧位姿，获得相同时间的图像特征点数据之后，建立关键帧并添加，这里的1表示对该关键帧进行回环检测
                 m_process.unlock();
                 frame_index++;
                 last_t = T;
@@ -423,7 +423,7 @@ void process()
         }
 
         std::chrono::milliseconds dura(5);
-        std::this_thread::sleep_for(dura);
+        std::this_thread::sleep_for(dura); //睡眠5ms，因为关键帧没那么快
     }
 }
 
@@ -437,7 +437,7 @@ void command()
         if (c == 's')
         {
             m_process.lock();
-            posegraph.savePoseGraph();
+            posegraph.savePoseGraph();  //保存位姿图信息
             m_process.unlock();
             printf("save pose graph finish\nyou can set 'load_previous_pose_graph' to 1 in the config file to reuse it next time\n");
             // printf("program shutting down...\n");
@@ -447,7 +447,7 @@ void command()
             new_sequence();
 
         std::chrono::milliseconds dura(5);
-        std::this_thread::sleep_for(dura);
+        std::this_thread::sleep_for(dura);  
     }
 }
 
@@ -478,7 +478,7 @@ int main(int argc, char **argv)
     LOOP_CLOSURE = fsSettings["loop_closure"];
     std::string IMAGE_TOPIC;
     int LOAD_PREVIOUS_POSE_GRAPH;
-    if (LOOP_CLOSURE)
+    if (LOOP_CLOSURE) //这个node节点主要负责loop closure, 如果不做回环，这个功能就失效
     {
         ROW = fsSettings["image_height"];
         COL = fsSettings["image_width"];
@@ -535,16 +535,17 @@ int main(int argc, char **argv)
     ros::Subscriber sub_relo_relative_pose = n.subscribe("/vins_estimator/relo_relative_pose", 2000, relo_relative_pose_callback);
 
     pub_match_img = n.advertise<sensor_msgs::Image>("match_image", 1000);
-    pub_camera_pose_visual = n.advertise<visualization_msgs::MarkerArray>("camera_pose_visual", 1000);
+    pub_camera_pose_visual = n.advertise<visualization_msgs::MarkerArray>("camera_pose_visual", 1000); //发布相机位姿和轨迹
     pub_key_odometrys = n.advertise<visualization_msgs::Marker>("key_odometrys", 1000);
-    pub_vio_path = n.advertise<nav_msgs::Path>("no_loop_path", 1000);
+    pub_vio_path = n.advertise<nav_msgs::Path>("no_loop_path", 1000); 
     pub_match_points = n.advertise<sensor_msgs::PointCloud>("match_points", 100);
 
     std::thread measurement_process;
     std::thread keyboard_command_process;
 
-    measurement_process = std::thread(process);
-    keyboard_command_process = std::thread(command);
+    measurement_process = std::thread(process); //核心线程
+    keyboard_command_process = std::thread(command); //等待键盘指令的线程
+                                                     //还开了一个optimize4DoF线程
 
 
     ros::spin();

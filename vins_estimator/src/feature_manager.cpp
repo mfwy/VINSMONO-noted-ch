@@ -31,7 +31,7 @@ int FeatureManager::getFeatureCount()
     for (auto &it : feature)
     {
 
-        it.used_num = it.feature_per_frame.size();
+        it.used_num = it.feature_per_frame.size();//特征持续的图像帧个数
 
         if (it.used_num >= 2 && it.start_frame < WINDOW_SIZE - 2)
         {
@@ -67,24 +67,24 @@ bool FeatureManager::addFeatureCheckParallax(int frame_count, const map<int, vec
         else if (it->feature_id == feature_id)
         {
             it->feature_per_frame.push_back(f_per_fra);
-            last_track_num++;
+            last_track_num++; //记录当前图像track到之前特征的个数
         }
     }
 
-    if (frame_count < 2 || last_track_num < 20)
+    if (frame_count < 2 || last_track_num < 20) //当跟踪上的特征点数小于20个时，返回true，表明这是一个关键帧（1）
         return true;
 
-    for (auto &it_per_id : feature)
+    for (auto &it_per_id : feature) //遍历各个特征
     {
         if (it_per_id.start_frame <= frame_count - 2 &&
-            it_per_id.start_frame + int(it_per_id.feature_per_frame.size()) - 1 >= frame_count - 1)
+            it_per_id.start_frame + int(it_per_id.feature_per_frame.size()) - 1 >= frame_count - 1) //记录跟踪成功超过2帧以上的特征点的个数
         {
-            parallax_sum += compensatedParallax2(it_per_id, frame_count);
+            parallax_sum += compensatedParallax2(it_per_id, frame_count); //TODO补偿旋转带来的视差变化，待看
             parallax_num++;
         }
     }
 
-    if (parallax_num == 0)
+    if (parallax_num == 0) //如果跟踪特征点个数超过20个，但这些特征点都是只出现在上一帧的，则认为是关键帧(2)
     {
         return true;
     }
@@ -92,7 +92,7 @@ bool FeatureManager::addFeatureCheckParallax(int frame_count, const map<int, vec
     {
         ROS_DEBUG("parallax_sum: %lf, parallax_num: %d", parallax_sum, parallax_num);
         ROS_DEBUG("current parallax: %lf", parallax_sum / parallax_num * FOCAL_LENGTH);
-        return parallax_sum / parallax_num >= MIN_PARALLAX;
+        return parallax_sum / parallax_num >= MIN_PARALLAX; //或者这些跟踪上的特征点的平均视差大于阈值10.0个像素时，也就是视角变化较大时，也认为是关键帧（3）
     }
 }
 
@@ -204,7 +204,7 @@ void FeatureManager::triangulate(Vector3d Ps[], Vector3d tic[], Matrix3d ric[])
     for (auto &it_per_id : feature)
     {
         it_per_id.used_num = it_per_id.feature_per_frame.size();
-        if (!(it_per_id.used_num >= 2 && it_per_id.start_frame < WINDOW_SIZE - 2))
+        if (!(it_per_id.used_num >= 2 && it_per_id.start_frame < WINDOW_SIZE - 2)) //只有多于两帧，且起始帧在次次新关键帧之前才会进行三角化，因此最新的三帧都不会成为新特征点的锚定帧
             continue;
 
         if (it_per_id.estimated_depth > 0)
@@ -216,12 +216,12 @@ void FeatureManager::triangulate(Vector3d Ps[], Vector3d tic[], Matrix3d ric[])
         int svd_idx = 0;
 
         Eigen::Matrix<double, 3, 4> P0;
-        Eigen::Vector3d t0 = Ps[imu_i] + Rs[imu_i] * tic[0];
-        Eigen::Matrix3d R0 = Rs[imu_i] * ric[0];
+        Eigen::Vector3d t0 = Ps[imu_i] + Rs[imu_i] * tic[0];    // 这里的tic为0
+        Eigen::Matrix3d R0 = Rs[imu_i] * ric[0];                //转换回相机位姿
         P0.leftCols<3>() = Eigen::Matrix3d::Identity();
         P0.rightCols<1>() = Eigen::Vector3d::Zero();
 
-        for (auto &it_per_frame : it_per_id.feature_per_frame)
+        for (auto &it_per_frame : it_per_id.feature_per_frame) //多帧三角化，利用最小二乘法和SVD矩阵分解求解
         {
             imu_j++;
 
@@ -283,7 +283,7 @@ void FeatureManager::removeBackShiftDepth(Eigen::Matrix3d marg_R, Eigen::Vector3
             it->start_frame--;
         else
         {
-            Eigen::Vector3d uv_i = it->feature_per_frame[0].point;  
+            Eigen::Vector3d uv_i = it->feature_per_frame[0].point;  //如果特征点存的第一帧可视帧为要边缘化的帧，则把深度值锚定帧修改为下一帧
             it->feature_per_frame.erase(it->feature_per_frame.begin());
             if (it->feature_per_frame.size() < 2)
             {
@@ -294,7 +294,7 @@ void FeatureManager::removeBackShiftDepth(Eigen::Matrix3d marg_R, Eigen::Vector3
             {
                 Eigen::Vector3d pts_i = uv_i * it->estimated_depth;
                 Eigen::Vector3d w_pts_i = marg_R * pts_i + marg_P;
-                Eigen::Vector3d pts_j = new_R.transpose() * (w_pts_i - new_P);
+                Eigen::Vector3d pts_j = new_R.transpose() * (w_pts_i - new_P); //把特征点的三维坐标反投影到新的帧上，获得新的锚定深度
                 double dep_j = pts_j(2);
                 if (dep_j > 0)
                     it->estimated_depth = dep_j;
@@ -312,7 +312,7 @@ void FeatureManager::removeBackShiftDepth(Eigen::Matrix3d marg_R, Eigen::Vector3
     }
 }
 
-void FeatureManager::removeBack()
+void FeatureManager::removeBack() //修改特征点的可视帧，丢掉不在窗口内的点
 {
     for (auto it = feature.begin(), it_next = feature.begin();
          it != feature.end(); it = it_next)
@@ -342,8 +342,8 @@ void FeatureManager::removeFront(int frame_count)
         }
         else
         {
-            int j = WINDOW_SIZE - 1 - it->start_frame;
-            if (it->endFrame() < frame_count - 1)
+            int j = WINDOW_SIZE - 1 - it->start_frame; //边缘化帧的位置
+            if (it->endFrame() < frame_count - 1) //结束帧小于要边缘化的帧时，略过
                 continue;
             it->feature_per_frame.erase(it->feature_per_frame.begin() + j);
             if (it->feature_per_frame.size() == 0)

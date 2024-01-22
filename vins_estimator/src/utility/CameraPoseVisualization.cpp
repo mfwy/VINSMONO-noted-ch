@@ -101,7 +101,7 @@ void CameraPoseVisualization::add_pose(const Eigen::Vector3d& p, const Eigen::Qu
 
     marker.ns = m_marker_ns;
     marker.id = m_markers.size() + 1;
-    marker.type = visualization_msgs::Marker::LINE_STRIP;
+    marker.type = visualization_msgs::Marker::LINE_STRIP; //线组合
     marker.action = visualization_msgs::Marker::ADD;
     marker.scale.x = m_line_width;
 

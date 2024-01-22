@@ -29,7 +29,7 @@ bool GlobalSFM::solveFrameByPnP(Matrix3d &R_initial, Vector3d &P_initial, int i,
 		if (sfm_f[j].state != true)
 			continue;
 		Vector2d point2d;
-		for (int k = 0; k < (int)sfm_f[j].observation.size(); k++)
+		for (int k = 0; k < (int)sfm_f[j].observation.size(); k++) //遍历查找有相同pt_id的3D点
 		{
 			if (sfm_f[j].observation[k].first == i)
 			{
@@ -76,7 +76,7 @@ void GlobalSFM::triangulateTwoFrames(int frame0, Eigen::Matrix<double, 3, 4> &Po
 									 vector<SFMFeature> &sfm_f)
 {
 	assert(frame0 != frame1);
-	for (int j = 0; j < feature_num; j++)
+	for (int j = 0; j < feature_num; j++) //遍历所有特征点，感觉有点低效
 	{
 		if (sfm_f[j].state == true)
 			continue;
@@ -121,7 +121,7 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 	feature_num = sfm_f.size();
 	//cout << "set 0 and " << l << " as known " << endl;
 	// have relative_r relative_t
-	// intial two view
+	// intial two view 填上两个已知相对位姿的两帧
 	q[l].w() = 1;
 	q[l].x() = 0;
 	q[l].y() = 0;
@@ -136,17 +136,17 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 	Matrix3d c_Rotation[frame_num];
 	Vector3d c_Translation[frame_num];
 	Quaterniond c_Quat[frame_num];
-	double c_rotation[frame_num][4];
+	double c_rotation[frame_num][4];  //数组形式用于存ceres优化变量
 	double c_translation[frame_num][3];
 	Eigen::Matrix<double, 3, 4> Pose[frame_num];
 
-	c_Quat[l] = q[l].inverse();
+	c_Quat[l] = q[l].inverse(); 						//都转换为C0参考系相对于当前图像时刻相机系，即world to camera
 	c_Rotation[l] = c_Quat[l].toRotationMatrix();
 	c_Translation[l] = -1 * (c_Rotation[l] * T[l]);
 	Pose[l].block<3, 3>(0, 0) = c_Rotation[l];
 	Pose[l].block<3, 1>(0, 3) = c_Translation[l];
 
-	c_Quat[frame_num - 1] = q[frame_num - 1].inverse();
+	c_Quat[frame_num - 1] = q[frame_num - 1].inverse();  //都转换到相对于当前图像时刻相机系下
 	c_Rotation[frame_num - 1] = c_Quat[frame_num - 1].toRotationMatrix();
 	c_Translation[frame_num - 1] = -1 * (c_Rotation[frame_num - 1] * T[frame_num - 1]);
 	Pose[frame_num - 1].block<3, 3>(0, 0) = c_Rotation[frame_num - 1];
@@ -160,7 +160,7 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 		// solve pnp
 		if (i > l)
 		{
-			Matrix3d R_initial = c_Rotation[i - 1];
+			Matrix3d R_initial = c_Rotation[i - 1];    		//用前一帧的位姿做初值
 			Vector3d P_initial = c_Translation[i - 1];
 			if(!solveFrameByPnP(R_initial, P_initial, i, sfm_f))
 				return false;
@@ -251,7 +251,7 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 		}
 		if (i == l || i == frame_num - 1)
 		{
-			problem.SetParameterBlockConstant(c_translation[i]);
+			problem.SetParameterBlockConstant(c_translation[i]);  //保持估计的位移恒定，这样保证尺度在优化过程中不被改动
 		}
 	}
 
@@ -259,15 +259,15 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 	{
 		if (sfm_f[i].state != true)
 			continue;
-		for (int j = 0; j < int(sfm_f[i].observation.size()); j++)
+		for (int j = 0; j < int(sfm_f[i].observation.size()); j++) //加入每一个图像点观测
 		{
 			int l = sfm_f[i].observation[j].first;
-			ceres::CostFunction* cost_function = ReprojectionError3D::Create(
+			ceres::CostFunction* cost_function = ReprojectionError3D::Create(   
 												sfm_f[i].observation[j].second.x(),
-												sfm_f[i].observation[j].second.y());
+												sfm_f[i].observation[j].second.y());    //TODO 重投影误差因子，待看
 
     		problem.AddResidualBlock(cost_function, NULL, c_rotation[l], c_translation[l], 
-    								sfm_f[i].position);	 
+    								sfm_f[i].position);	  								//这里没有加鲁棒核
 		}
 
 	}
@@ -293,13 +293,13 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 		q[i].x() = c_rotation[i][1]; 
 		q[i].y() = c_rotation[i][2]; 
 		q[i].z() = c_rotation[i][3]; 
-		q[i] = q[i].inverse();
+		q[i] = q[i].inverse();   //逆转回去
 		//cout << "final  q" << " i " << i <<"  " <<q[i].w() << "  " << q[i].vec().transpose() << endl;
 	}
 	for (int i = 0; i < frame_num; i++)
 	{
 
-		T[i] = -1 * (q[i] * Vector3d(c_translation[i][0], c_translation[i][1], c_translation[i][2]));
+		T[i] = -1 * (q[i] * Vector3d(c_translation[i][0], c_translation[i][1], c_translation[i][2])); //逆转回去
 		//cout << "final  t" << " i " << i <<"  " << T[i](0) <<"  "<< T[i](1) <<"  "<< T[i](2) << endl;
 	}
 	for (int i = 0; i < (int)sfm_f.size(); i++)

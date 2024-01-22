@@ -25,7 +25,7 @@ enum
     CAMERA_ODOMETRY_TRANSFORM = 1 << 6
 };
 
-class CostFunctionFactory
+class CostFunctionFactory  //没用上
 {
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
